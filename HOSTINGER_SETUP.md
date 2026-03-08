@@ -112,8 +112,10 @@ nano .env
 ### 7. Install Dependencies & Build
 
 ```bash
-# Install frontend dependencies and build
-npm ci
+# Install frontend dependencies (including devDependencies for TypeScript)
+npm ci --include=dev
+
+# Build frontend
 npm run build
 
 # Install backend dependencies

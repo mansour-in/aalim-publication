@@ -22,9 +22,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Step 1: Install dependencies
+# Step 1: Install dependencies (including devDependencies)
 echo -e "${YELLOW}[1/6] Installing frontend dependencies...${NC}"
-npm ci
+npm ci --include=dev
 
 # Step 2: Build frontend
 echo -e "${YELLOW}[2/6] Building frontend for production...${NC}"
