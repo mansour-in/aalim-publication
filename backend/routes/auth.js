@@ -242,7 +242,7 @@ router.get('/profile', asyncHandler(async (req, res) => {
       totalDonations: donor.total_donations,
       totalAmount: donor.total_amount,
     },
-  };
+  });
 }));
 
 /**

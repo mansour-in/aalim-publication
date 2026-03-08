@@ -58,7 +58,7 @@ router.get('/stats', asyncHandler(async (req, res) => {
       failedCount: failed.count,
       failedAmount: failed.amount,
     },
-  };
+  });
 }));
 
 /**
@@ -157,7 +157,7 @@ router.get('/donations', asyncHandler(async (req, res) => {
       total: total.count,
       totalPages: Math.ceil(total.count / limit),
     },
-  };
+  });
 }));
 
 /**

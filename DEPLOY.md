@@ -1,125 +1,206 @@
-# Production Deployment Guide
+# Deployment Guide
 
-## Database Configuration ✅
+## 🏠 Local Development vs 🚀 Production
 
-**Database credentials configured in:** `backend/.env`
+This project has **two separate environments**:
 
+| Environment | Database | Frontend URL | Backend URL |
+|-------------|----------|--------------|-------------|
+| **Local** | MySQL on localhost | http://localhost:5173 | http://localhost:5000 |
+| **Production** | Your server MySQL | https://donation.aalimpublications.com | https://donation.aalimpublications.com/api |
+
+---
+
+## 🏠 Option 1: Local Development
+
+### Step 1: Install MySQL Locally
+
+```bash
+# macOS with Homebrew
+brew install mysql
+brew services start mysql
+
+# Create local database
+mysql -u root -e "CREATE DATABASE hadith_fundraiser_local;"
 ```
+
+> **Don't have MySQL?** You can use [DBngin](https://dbngin.com/) (free Mac app) for easy MySQL setup.
+
+### Step 2: Start Backend
+
+```bash
+cd backend
+npm install
+npm start
+```
+
+Backend will run at: http://localhost:5000
+
+### Step 3: Start Frontend (separate terminal)
+
+```bash
+# In project root
+npm install
+npm run dev
+```
+
+Frontend will run at: http://localhost:5173
+
+### Step 4: Run Setup
+
+Visit: http://localhost:5173/setup
+
+Create your admin account and configure the database.
+
+---
+
+## 🚀 Option 2: Deploy to Production
+
+### Quick Deploy
+
+```bash
+# Run the deployment script
+chmod +x deploy-production.sh
+./deploy-production.sh
+```
+
+### Manual Deploy
+
+#### 1. Configure Production Environment
+
+```bash
+# Copy production config
+cp backend/.env.production backend/.env
+```
+
+#### 2. Build Frontend
+
+```bash
+npm run build
+```
+
+#### 3. Upload to Server
+
+**Frontend files (dist/ folder):**
+```
+Upload to: /home/u145912236/domains/aalimpublications.com/public_html/donation/
+Files:
+  - dist/index.html
+  - dist/assets/
+```
+
+**Backend files (backend/ folder):**
+```
+Upload to: /home/u145912236/aalim-backend/
+Files:
+  - backend/server.js
+  - backend/config/
+  - backend/database/
+  - backend/middleware/
+  - backend/routes/
+  - backend/services/
+  - backend/package.json
+  - backend/.env (with production credentials)
+```
+
+#### 4. Start Backend on Server
+
+Via SSH on your server:
+```bash
+cd /home/u145912236/aalim-backend
+npm install
+npm start
+```
+
+Or using PM2 (recommended):
+```bash
+npm install -g pm2
+pm2 start server.js --name "aalim-api"
+pm2 save
+pm2 startup
+```
+
+#### 5. Run Setup Wizard
+
+Visit: **https://donation.aalimpublications.com/setup**
+
+---
+
+## 🔧 Environment Files
+
+### backend/.env (Local Development)
+```
+NODE_ENV=development
+DB_HOST=localhost
+DB_NAME=hadith_fundraiser_local
+DB_USER=root
+DB_PASSWORD=
+RAZORPAY_MODE=test
+...
+```
+
+### backend/.env.production (Production - Never Commit!)
+```
+NODE_ENV=production
 DB_HOST=localhost
 DB_NAME=u145912236_aalim_publicat
 DB_USER=u145912236_aalim_hadiths
 DB_PASSWORD=6s!C$iGD4*&&
+...
 ```
 
-## Frontend Configuration ✅
+---
 
-**Production API URL:** `https://donation.aalimpublications.com/api`
+## 📋 Post-Setup Checklist
 
-Configured in `.env.production`
+After running `/setup`:
 
-## Build Status ✅
+- [ ] **Admin Account Created** - Remember your email/password
+- [ ] **Database Initialized** - Tables created automatically
+- [ ] **Campaign Settings** - Goal amount, price per Hadith configured
+- [ ] **Test Donation** - Make a test payment (use Razorpay test cards)
 
-Frontend built successfully in `dist/` folder.
+---
 
-## Deployment Steps
+## 🔐 Security Notes
 
-### 1. Upload Frontend Files
-Upload all files from `dist/` folder to your web root:
-```
-/home/u145912236/domains/aalimpublications.com/public_html/donation/
-```
+1. **Never commit `backend/.env.production`** - It's in `.gitignore`
+2. **Change JWT_SECRET** in production to a random string
+3. **Update Razorpay keys** to live keys when ready
+4. **Enable HTTPS** on your production domain
 
-### 2. Upload Backend Files
-Upload backend folder to a non-public location:
-```
-/home/u145912236/aalim-backend/
-```
+---
 
-### 3. Configure Node.js on Server
+## 🆘 Troubleshooting
 
-If your hosting supports Node.js (like cPanel with Node.js Selector):
-
-1. Go to cPanel → Node.js Selector
-2. Create application with:
-   - Node.js version: 18.x
-   - Application root: `aalim-backend`
-   - Application URL: `donation.aalimpublications.com/api`
-   - Startup file: `server.js`
-
-### 4. Setup Database
-
-The database is already created. The setup wizard will create tables automatically when you visit:
-```
-https://donation.aalimpublications.com/setup
+### "Connection refused" Error
+MySQL is not running. Start it:
+```bash
+brew services start mysql
 ```
 
-### 5. Configure .htaccess (if using Apache)
-
-Create `.htaccess` in the web root:
-
-```apache
-# Redirect all requests to index.html (for React Router)
-<IfModule mod_rewrite.c>
-  RewriteEngine On
-  RewriteBase /
-  RewriteRule ^index\.html$ - [L]
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule . /index.html [L]
-</IfModule>
-
-# API Proxy to Node.js backend (if backend on same server)
-RewriteCond %{REQUEST_URI} ^/api/
-RewriteRule ^api/(.*)$ http://localhost:5000/api/$1 [P,L]
+### "Database does not exist" Error
+Create the database:
+```bash
+mysql -u root -e "CREATE DATABASE hadith_fundraiser_local;"
 ```
 
-### 6. Setup Wizard
+### "Port already in use" Error
+Kill processes on port 5000:
+```bash
+lsof -ti:5000 | xargs kill -9
+```
 
-Visit: **https://donation.aalimpublications.com/setup**
+### Setup Already Completed
+Delete the lock file to re-run setup:
+```bash
+rm backend/.setup-complete
+```
 
-The wizard will guide you through:
-1. Database initialization
-2. Admin account creation
-3. Campaign settings
-4. Payment gateway setup
+---
 
-## Post-Setup Admin Access
+## 📞 Support
 
-After setup is complete:
-- **Admin Login:** https://donation.aalimpublications.com/admin
-- **Main Site:** https://donation.aalimpublications.com/
-
-## Important Notes
-
-1. **Razorpay Keys:** Update the test keys with live keys in `backend/.env` when ready for production
-2. **JWT Secret:** Change `JWT_SECRET` to a secure random string
-3. **Email:** Update SMTP settings with your email provider
-4. **Webhook:** Configure Razorpay webhook URL to: `https://donation.aalimpublications.com/api/webhooks/razorpay`
-
-## Files to Upload
-
-### Frontend (dist/ folder):
-- index.html
-- assets/ (all CSS and JS files)
-
-### Backend (backend/ folder):
-- server.js
-- config/
-- database/
-- middleware/
-- routes/
-- services/
-- package.json
-- .env (already configured with your DB credentials)
-
-## Troubleshooting
-
-If you get "Connection refused" errors:
-- Make sure Node.js backend is running
-- Check if port 5000 is allowed
-- Verify database credentials
-
-If API calls fail:
-- Check browser console for CORS errors
-- Verify `VITE_API_URL` is set correctly
-- Ensure backend is responding at the API endpoint
+- **Setup Page:** `/setup` - Database & admin configuration
+- **Admin Panel:** `/admin` - Manage donations & settings
+- **API Health:** `/api/health` - Check backend status

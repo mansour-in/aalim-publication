@@ -117,7 +117,7 @@ router.get('/history', asyncHandler(async (req, res) => {
       total: total.count,
       totalPages: Math.ceil(total.count / limit),
     },
-  };
+  });
 }));
 
 /**
