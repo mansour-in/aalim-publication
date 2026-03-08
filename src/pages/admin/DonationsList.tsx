@@ -1,7 +1,7 @@
 /**
  * Donations List Page
  * ===================
- * Manage and view all donations
+ * Manage and view all donations with PAN and fee fields
  */
 
 import { useState, useEffect } from 'react';
@@ -26,6 +26,12 @@ const statusColors: Record<string, string> = {
   failed: 'bg-red-100 text-red-700',
   cancelled: 'bg-slate-100 text-slate-700',
 };
+
+// Mask PAN number for display
+function maskPan(pan: string | null): string {
+  if (!pan || pan.length !== 10) return '-';
+  return pan.substring(0, 5) + '****' + pan.substring(9);
+}
 
 export default function DonationsList() {
   const navigate = useNavigate();
@@ -143,8 +149,10 @@ export default function DonationsList() {
                     <tr>
                       <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">ID</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Donor</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Amount</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Hadiths</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Base</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Fee</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Total</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">PAN</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Status</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Date</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Actions</th>
@@ -156,14 +164,29 @@ export default function DonationsList() {
                         <td className="px-4 py-3 text-sm text-slate-600">#{donation.id}</td>
                         <td className="px-4 py-3">
                           <div>
-                            <p className="font-medium text-slate-900">{donation.donorName || 'Anonymous'}</p>
-                            <p className="text-sm text-slate-500">{donation.donorEmail}</p>
+                            <p className="font-medium text-slate-900">{donation.donor?.name || 'Anonymous'}</p>
+                            <p className="text-sm text-slate-500">{donation.donor?.email}</p>
                           </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-900">
+                          ₹{(donation.baseAmount || donation.amount)?.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {donation.feeAmount > 0 ? (
+                            <span className="text-emerald-600">
+                              ₹{donation.feeAmount.toLocaleString()}
+                              {donation.feeCovered && <span className="text-xs ml-1">(covered)</span>}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-slate-900">
                           ₹{donation.amount?.toLocaleString()}
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{donation.hadithCount}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600 font-mono">
+                          {maskPan(donation.panNumber)}
+                        </td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[donation.status] || 'bg-slate-100 text-slate-700'}`}>
                             {donation.status}
