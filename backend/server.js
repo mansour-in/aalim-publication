@@ -107,17 +107,37 @@ app.use('/receipts', express.static(path.join(__dirname, 'public', 'receipts')))
 
 // Serve frontend static files in production
 if (process.env.NODE_ENV === 'production') {
-  const frontendBuildPath = path.join(__dirname, '..', 'dist');
-  app.use(express.static(frontendBuildPath));
+  // Support both Hostinger structure (dist in root) and local dev structure
+  const possiblePaths = [
+    path.join(__dirname, '..', 'dist'),           // Local: backend/../dist
+    path.join(__dirname, '..', '..', 'dist'),     // Hostinger: backend/../../dist
+    path.join(process.cwd(), 'dist'),             // Current working directory
+  ];
   
-  // Handle React routing, return all requests to React app
-  app.get('*', (req, res, next) => {
-    // Skip API routes
-    if (req.url.startsWith('/api/') || req.url.startsWith('/receipts/')) {
-      return next();
+  let frontendBuildPath = null;
+  for (const p of possiblePaths) {
+    if (require('fs').existsSync(p)) {
+      frontendBuildPath = p;
+      console.log(`✓ Found frontend build at: ${p}`);
+      break;
     }
-    res.sendFile(path.join(frontendBuildPath, 'index.html'));
-  });
+  }
+  
+  if (!frontendBuildPath) {
+    console.error('✗ Frontend build (dist folder) not found!');
+    console.error('  Searched paths:', possiblePaths);
+  } else {
+    app.use(express.static(frontendBuildPath));
+    
+    // Handle React routing, return all requests to React app
+    app.get('*', (req, res, next) => {
+      // Skip API routes
+      if (req.url.startsWith('/api/') || req.url.startsWith('/receipts/')) {
+        return next();
+      }
+      res.sendFile(path.join(frontendBuildPath, 'index.html'));
+    });
+  }
 }
 
 // ============================================
