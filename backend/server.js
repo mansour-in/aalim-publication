@@ -105,6 +105,21 @@ app.use('/api/auth/magic-link/', authLimiter);
 // Serve receipt PDFs
 app.use('/receipts', express.static(path.join(__dirname, 'public', 'receipts')));
 
+// Serve frontend static files in production
+if (process.env.NODE_ENV === 'production') {
+  const frontendBuildPath = path.join(__dirname, '..', 'dist');
+  app.use(express.static(frontendBuildPath));
+  
+  // Handle React routing, return all requests to React app
+  app.get('*', (req, res, next) => {
+    // Skip API routes
+    if (req.url.startsWith('/api/') || req.url.startsWith('/receipts/')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendBuildPath, 'index.html'));
+  });
+}
+
 // ============================================
 // ROUTES
 // ============================================
