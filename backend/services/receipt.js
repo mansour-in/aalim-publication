@@ -8,6 +8,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const db = require('../config/database');
+const logger = require('./logger');
 
 const RECEIPTS_DIR = path.join(__dirname, '..', 'public', 'receipts');
 
@@ -53,12 +54,24 @@ function formatDate(date) {
 }
 
 /**
+ * Mask PAN number
+ * @param {string} pan - PAN number
+ * @returns {string} Masked PAN
+ */
+function maskPan(pan) {
+  if (!pan || pan.length !== 10) return '';
+  return pan.substring(0, 5) + '****' + pan.substring(9);
+}
+
+/**
  * Generate PDF receipt
  * @param {object} donation - Donation record
  * @param {object} donor - Donor record
  * @returns {Promise<object>} Receipt info
  */
 async function generateReceipt(donation, donor) {
+  logger.info('Generating receipt', { donationId: donation.id, category: 'email' });
+  
   // Check if receipt already exists
   let receipt = await db.queryOne(
     'SELECT * FROM receipts WHERE donation_id = ?',
@@ -66,6 +79,7 @@ async function generateReceipt(donation, donor) {
   );
   
   if (receipt) {
+    logger.info('Receipt already exists', { donationId: donation.id, receiptNumber: receipt.receipt_number, category: 'email' });
     return {
       receiptNumber: receipt.receipt_number,
       filePath: receipt.file_path,
@@ -78,14 +92,21 @@ async function generateReceipt(donation, donor) {
   const fileName = `receipt-${receiptNumber}.pdf`;
   const filePath = path.join(RECEIPTS_DIR, fileName);
   
+  // Get settings
+  const settings = await db.query('SELECT key_name, value FROM settings WHERE key_name LIKE "org_%" OR key_name LIKE "site_%" OR key_name = "show_pan_on_receipt"');
+  const orgSettings = {};
+  settings.forEach(s => orgSettings[s.key_name] = s.value);
+  
+  const showPanOnReceipt = orgSettings.show_pan_on_receipt === 'true';
+  
   // Create PDF
   const doc = new PDFDocument({ size: 'A4', margin: 50 });
   const stream = fs.createWriteStream(filePath);
   doc.pipe(stream);
   
-  // Header
+  // Header with Logo Area
   doc.fontSize(24).font('Helvetica-Bold').fillColor('#0B3D3D');
-  doc.text('RAMADAN HADITH FUNDRAISER', { align: 'center' });
+  doc.text(orgSettings.org_name || 'RAMADAN HADITH FUNDRAISER', { align: 'center' });
   
   doc.moveDown(0.5);
   doc.fontSize(14).font('Helvetica').fillColor('#D4AF37');
@@ -119,6 +140,13 @@ async function generateReceipt(donation, donor) {
   doc.text(`Name: ${donor.name || 'Anonymous'}`);
   doc.text(`Email: ${donor.email}`);
   if (donor.phone) doc.text(`Phone: ${donor.phone}`);
+  
+  // Show PAN if enabled and available
+  const panNumber = donation.pan_number || donor.pan_number;
+  if (showPanOnReceipt && panNumber) {
+    doc.text(`PAN: ${maskPan(panNumber)}`);
+  }
+  
   if (donor.address) {
     const address = [donor.address, donor.city, donor.country]
       .filter(Boolean)
@@ -135,20 +163,28 @@ async function generateReceipt(donation, donor) {
   
   doc.fontSize(11).font('Helvetica');
   doc.text(`Hadiths Sponsored: ${donation.hadith_count}`);
-  doc.text(`Amount per Hadith: ${formatCurrency(500)}`);
+  
+  // Show fee breakdown if fee was covered
+  if (donation.fee_covered && donation.fee_amount > 0) {
+    doc.moveDown(0.3);
+    doc.text(`Base Donation: ${formatCurrency(donation.base_amount || donation.amount - donation.fee_amount)}`);
+    doc.text(`Payment Processing Fee (${donation.fee_percentage}%): ${formatCurrency(donation.fee_amount)}`);
+    doc.text(`Fee Covered by Donor: Yes`);
+  }
   
   doc.moveDown(0.5);
   
   // Total box
   doc.rect(50, doc.y, 495, 40).stroke('#D4AF37');
   doc.fontSize(14).font('Helvetica-Bold').fillColor('#0B3D3D');
-  doc.text(`Total Amount: ${formatCurrency(donation.amount)}`, 60, doc.y + 10);
+  doc.text(`Total Amount Paid: ${formatCurrency(donation.amount)}`, 60, doc.y + 10);
   
   doc.moveDown(2);
   
   // Thank you message
+  const thankYouMessage = orgSettings.thank_you_message || 'JazakAllah Khair for your generous contribution!';
   doc.fontSize(12).font('Helvetica').fillColor('#333');
-  doc.text('JazakAllah Khair for your generous contribution!', { align: 'center' });
+  doc.text(thankYouMessage, { align: 'center' });
   doc.moveDown(0.5);
   doc.text(
     'Your donation will help spread the teachings of Hadith to communities around the world.',
@@ -163,20 +199,20 @@ async function generateReceipt(donation, donor) {
     align: 'center',
   });
   doc.moveDown(0.5);
-  doc.text('For any queries, please contact us at support@example.com', { align: 'center' });
+  doc.text(`For any queries, please contact us at ${orgSettings.org_email || 'support@example.com'}`, { align: 'center' });
   
   // Organization info
   doc.moveDown(1);
-  const settings = await db.query('SELECT key_name, value FROM settings WHERE key_name LIKE "org_%"');
-  const orgSettings = {};
-  settings.forEach(s => orgSettings[s.key_name] = s.value);
-  
   if (orgSettings.org_name) {
     doc.fontSize(10).font('Helvetica-Bold');
     doc.text(orgSettings.org_name, { align: 'center' });
     if (orgSettings.org_address) {
       doc.fontSize(9).font('Helvetica');
       doc.text(orgSettings.org_address, { align: 'center' });
+    }
+    if (orgSettings.org_phone) {
+      doc.fontSize(9).font('Helvetica');
+      doc.text(`Phone: ${orgSettings.org_phone}`, { align: 'center' });
     }
   }
   
@@ -193,6 +229,8 @@ async function generateReceipt(donation, donor) {
     'INSERT INTO receipts (donation_id, receipt_number, file_path) VALUES (?, ?, ?)',
     [donation.id, receiptNumber, filePath]
   );
+  
+  logger.info('Receipt generated successfully', { donationId: donation.id, receiptNumber, category: 'email' });
   
   return {
     receiptNumber,
@@ -228,4 +266,5 @@ module.exports = {
   generateReceiptNumber,
   formatCurrency,
   formatDate,
+  maskPan,
 };

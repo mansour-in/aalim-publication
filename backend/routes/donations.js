@@ -8,16 +8,22 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
 const { asyncHandler, ValidationError, NotFoundError } = require('../middleware/errorHandler');
+const logger = require('../services/logger');
 
 /**
  * Get donation statistics
  * GET /api/donations/stats
  */
 router.get('/stats', asyncHandler(async (req, res) => {
+  logger.info('Fetching donation stats', { category: 'donation' });
+  
   const stats = await db.queryOne(`
     SELECT 
       COUNT(*) as total_donations,
       COALESCE(SUM(amount), 0) as total_raised,
+      COALESCE(SUM(base_amount), 0) as total_base_amount,
+      COALESCE(SUM(fee_amount), 0) as total_fees,
+      COALESCE(SUM(CASE WHEN fee_covered = TRUE THEN fee_amount ELSE 0 END), 0) as total_fees_covered,
       COUNT(DISTINCT donor_id) as total_donors,
       COALESCE(SUM(hadith_count), 0) as hadiths_sponsored
     FROM donations 
@@ -35,6 +41,9 @@ router.get('/stats', asyncHandler(async (req, res) => {
     SELECT 
       d.id,
       d.amount,
+      d.base_amount,
+      d.fee_amount,
+      d.fee_covered,
       d.hadith_count,
       d.status,
       d.created_at,
@@ -47,11 +56,16 @@ router.get('/stats', asyncHandler(async (req, res) => {
     LIMIT 10
   `);
   
+  logger.info('Donation stats fetched successfully', { category: 'donation' });
+  
   res.json({
     success: true,
     stats: {
       totalDonations: stats.total_donations,
       totalRaised: stats.total_raised,
+      totalBaseAmount: stats.total_base_amount,
+      totalFees: stats.total_fees,
+      totalFeesCovered: stats.total_fees_covered,
       totalDonors: stats.total_donors,
       hadithsSponsored: stats.hadiths_sponsored,
       goal: goal,
@@ -60,6 +74,9 @@ router.get('/stats', asyncHandler(async (req, res) => {
     recentDonations: recentDonations.map(d => ({
       id: d.id,
       amount: d.amount,
+      baseAmount: d.base_amount,
+      feeAmount: d.fee_amount,
+      feeCovered: d.fee_covered === 1,
       hadithCount: d.hadith_count,
       donorName: d.is_anonymous ? 'Anonymous' : (d.donor_name || 'Anonymous'),
       createdAt: d.created_at,
@@ -72,10 +89,14 @@ router.get('/stats', asyncHandler(async (req, res) => {
  * GET /api/donations/stats/public
  */
 router.get('/public', asyncHandler(async (req, res) => {
+  logger.info('Fetching public donation stats', { category: 'donation' });
+  
   const stats = await db.queryOne(`
     SELECT 
       COUNT(*) as total_donations,
       COALESCE(SUM(amount), 0) as total_raised,
+      COALESCE(SUM(base_amount), 0) as total_base_amount,
+      COALESCE(SUM(fee_amount), 0) as total_fees,
       COUNT(DISTINCT donor_id) as total_donors,
       COALESCE(SUM(hadith_count), 0) as hadiths_sponsored
     FROM donations 
@@ -95,6 +116,8 @@ router.get('/public', asyncHandler(async (req, res) => {
   const raised = parseFloat(stats.total_raised) || 0;
   const hadithsSponsored = parseInt(stats.hadiths_sponsored) || 0;
   
+  logger.info('Public donation stats fetched successfully', { category: 'donation' });
+  
   res.json({
     success: true,
     data: {
@@ -106,6 +129,8 @@ router.get('/public', asyncHandler(async (req, res) => {
       progress: Math.min(100, (raised / goal) * 100),
       hadithPrice: pricePerHadith,
       currency: 'INR',
+      totalFees: parseFloat(stats.total_fees) || 0,
+      totalFeesCovered: parseFloat(stats.total_fees) || 0, // All fees are covered in this model
     },
   });
 }));
@@ -118,15 +143,21 @@ router.get('/history', asyncHandler(async (req, res) => {
   const { page = 1, limit = 10 } = req.query;
   const offset = (page - 1) * limit;
   
+  logger.info('Fetching donation history', { userId: req.user.id, category: 'donation' });
+  
   const donations = await db.query(`
     SELECT 
       d.id,
       d.amount,
+      d.base_amount,
+      d.fee_amount,
+      d.fee_covered,
       d.hadith_count,
       d.status,
       d.payment_method,
       d.created_at,
       d.completed_at,
+      d.pan_number,
       r.receipt_number,
       r.file_path as receipt_url
     FROM donations d
@@ -141,16 +172,22 @@ router.get('/history', asyncHandler(async (req, res) => {
     [req.user.id]
   );
   
+  logger.info('Donation history fetched', { count: donations.length, category: 'donation' });
+  
   res.json({
     success: true,
     donations: donations.map(d => ({
       id: d.id,
       amount: d.amount,
+      baseAmount: d.base_amount,
+      feeAmount: d.fee_amount,
+      feeCovered: d.fee_covered === 1,
       hadithCount: d.hadith_count,
       status: d.status,
       paymentMethod: d.payment_method,
       createdAt: d.created_at,
       completedAt: d.completed_at,
+      panNumber: d.pan_number,
       receiptNumber: d.receipt_number,
       receiptUrl: d.receipt_url,
     })),
@@ -169,6 +206,8 @@ router.get('/history', asyncHandler(async (req, res) => {
  */
 router.get('/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
+  
+  logger.info('Fetching donation details', { donationId: id, userId: req.user.id, category: 'donation' });
   
   const donation = await db.queryOne(`
     SELECT 
@@ -190,31 +229,38 @@ router.get('/:id', asyncHandler(async (req, res) => {
   `, [id, req.user.id]);
   
   if (!donation) {
+    logger.warn('Donation not found', { donationId: id, userId: req.user.id, category: 'donation' });
     throw new NotFoundError('Donation not found');
   }
+  
+  logger.info('Donation details fetched', { donationId: id, category: 'donation' });
   
   res.json({
     success: true,
     donation: {
       id: donation.id,
       amount: donation.amount,
+      baseAmount: donation.base_amount,
+      feeAmount: donation.fee_amount,
+      feeCovered: donation.fee_covered === 1,
+      feePercentage: donation.fee_percentage,
       hadithCount: donation.hadith_count,
       status: donation.status,
       paymentMethod: donation.payment_method,
       razorpayOrderId: donation.razorpay_order_id,
       razorpayPaymentId: donation.razorpay_payment_id,
+      message: donation.message,
+      panNumber: donation.pan_number,
       donorName: donation.is_anonymous ? 'Anonymous' : donation.donor_name,
       donorEmail: donation.donor_email,
       donorPhone: donation.donor_phone,
       address: donation.address,
       city: donation.city,
       country: donation.country,
-      message: donation.message,
-      createdAt: donation.created_at,
-      completedAt: donation.completed_at,
       receiptNumber: donation.receipt_number,
       receiptUrl: donation.receipt_url,
-      receiptGeneratedAt: donation.receipt_generated_at,
+      createdAt: donation.created_at,
+      completedAt: donation.completed_at,
     },
   });
 }));

@@ -13,7 +13,10 @@ import {
   Settings, 
   LogOut,
   Menu,
-  ScrollText
+  ScrollText,
+  Globe,
+  CreditCard,
+  BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -21,7 +24,10 @@ const navItems = [
   { path: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/admin/donations', label: 'Donations', icon: Heart },
   { path: '/admin/donors', label: 'Donors', icon: Users },
-  { path: '/admin/settings', label: 'Settings', icon: Settings },
+  { path: '/admin/reports', label: 'Reports', icon: BarChart3 },
+  { path: '/admin/settings', label: 'Campaign', icon: Settings },
+  { path: '/admin/site-settings', label: 'Site Settings', icon: Globe },
+  { path: '/admin/payment-settings', label: 'Payment', icon: CreditCard },
   { path: '/admin/logs', label: 'Logs', icon: ScrollText },
 ];
 

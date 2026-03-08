@@ -85,6 +85,8 @@ export interface PublicStats {
     progress: number;
     hadithPrice: number;
     currency: string;
+    totalFees: number;
+    totalFeesCovered: number;
   };
 }
 
@@ -124,7 +126,68 @@ export interface PaymentVerifyData {
   razorpay_signature: string;
 }
 
+export interface PaymentConfig {
+  pricePerHadith: number;
+  feeCoverageEnabled: boolean;
+  feePercentage: number;
+  feeCoverageLabel: string;
+  panEnabled: boolean;
+  panRequired: boolean;
+  razorpayKeyId: string;
+}
+
+export interface CreateOrderData {
+  hadithCount: number;
+  donorInfo: {
+    email: string;
+    name?: string;
+    phone?: string;
+    address?: string;
+    city?: string;
+    country?: string;
+    panNumber?: string;
+    isAnonymous?: boolean;
+    message?: string;
+  };
+  coverFee?: boolean;
+}
+
+export interface CreateOrderResponse {
+  success: boolean;
+  order: {
+    id: string;
+    amount: number;
+    currency: string;
+  };
+  amounts: {
+    baseAmount: number;
+    feeAmount: number;
+    totalAmount: number;
+    feePercentage: number;
+    feeCovered: boolean;
+  };
+  donationId: number;
+  keyId: string;
+  prefill: {
+    name: string;
+    email: string;
+    contact: string;
+  };
+}
+
 export const paymentApi = {
+  // Get payment configuration
+  getConfig: async (): Promise<{ success: boolean; config: PaymentConfig }> => {
+    const response = await apiClient.get('/payments/config');
+    return response.data;
+  },
+
+  // Create payment order
+  createOrder: async (data: CreateOrderData): Promise<CreateOrderResponse> => {
+    const response = await apiClient.post('/payments/create-order', data);
+    return response.data;
+  },
+
   // Verify payment
   verify: async (data: PaymentVerifyData) => {
     const response = await apiClient.post('/payments/verify', data);
@@ -132,8 +195,14 @@ export const paymentApi = {
   },
 
   // Get payment status
-  getStatus: async (donationId: number) => {
-    const response = await apiClient.get(`/payments/status/${donationId}`);
+  getStatus: async (orderId: string) => {
+    const response = await apiClient.get(`/payments/status/${orderId}`);
+    return response.data;
+  },
+
+  // Retry payment
+  retry: async (donationId: number) => {
+    const response = await apiClient.post('/payments/retry', { donationId });
     return response.data;
   },
 
@@ -184,21 +253,59 @@ export const authApi = {
 // DONOR API
 // ============================================
 
+export interface DonorProfile {
+  id: number;
+  email: string;
+  name?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  panNumber?: string;
+  isAnonymous: boolean;
+  isVerified: boolean;
+  totalDonations: number;
+  totalAmount: number;
+}
+
+export interface DonorDonation {
+  id: number;
+  amount: number;
+  baseAmount: number;
+  feeAmount: number;
+  feeCovered: boolean;
+  hadithCount: number;
+  status: string;
+  paymentMethod?: string;
+  createdAt: string;
+  completedAt?: string;
+  panNumber?: string;
+  receiptNumber?: string;
+  receiptUrl?: string;
+}
+
 export const donorApi = {
   // Get profile
-  getProfile: async () => {
+  getProfile: async (): Promise<{ success: boolean; donor: DonorProfile }> => {
     const response = await apiClient.get('/donors/profile');
     return response.data;
   },
 
   // Update profile
-  updateProfile: async (data: { name?: string; phone?: string }) => {
+  updateProfile: async (data: { 
+    name?: string; 
+    phone?: string;
+    address?: string;
+    city?: string;
+    country?: string;
+    panNumber?: string;
+  }) => {
     const response = await apiClient.put('/donors/profile', data);
     return response.data;
   },
 
   // Get donations
-  getDonations: async () => {
+  getDonations: async (): Promise<{ success: boolean; donations: DonorDonation[]; pagination: any }> => {
     const response = await apiClient.get('/donors/donations');
     return response.data;
   },
@@ -214,22 +321,85 @@ export const donorApi = {
 // ADMIN API
 // ============================================
 
+export interface DashboardStats {
+  totalDonations: number;
+  totalRaised: number;
+  totalBaseAmount: number;
+  totalFees: number;
+  totalFeesCovered: number;
+  totalDonors: number;
+  hadithsSponsored: number;
+  todayRaised: number;
+  monthRaised: number;
+  pendingCount: number;
+  pendingAmount: number;
+  failedCount: number;
+  failedAmount: number;
+  topDonors: Array<{
+    id: number;
+    name: string;
+    email: string;
+    totalDonated: number;
+  }>;
+  recentDonations: Array<{
+    id: number;
+    amount: number;
+    baseAmount: number;
+    feeAmount: number;
+    feeCovered: boolean;
+    hadithCount: number;
+    status: string;
+    createdAt: string;
+    donorName: string;
+    donorEmail: string;
+  }>;
+}
+
+export interface AdminDonation {
+  id: number;
+  amount: number;
+  baseAmount: number;
+  feeAmount: number;
+  feeCovered: boolean;
+  hadithCount: number;
+  status: string;
+  paymentMethod?: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  panNumber?: string;
+  createdAt: string;
+  completedAt?: string;
+  donor: {
+    id: number;
+    name: string;
+    email: string;
+    phone?: string;
+  };
+  receiptNumber?: string;
+}
+
 export const adminApi = {
   // Get dashboard stats
-  getDashboard: async () => {
+  getDashboard: async (): Promise<{ success: boolean; data: DashboardStats }> => {
     const response = await apiClient.get('/admin/dashboard');
     return response.data;
   },
 
   // Get donations
-  getDonations: async (params?: { status?: string; search?: string; page?: number; limit?: number }) => {
+  getDonations: async (params?: { status?: string; search?: string; page?: number; limit?: number; startDate?: string; endDate?: string }) => {
     const response = await apiClient.get('/admin/donations', { params });
     return response.data;
   },
 
   // Get donation details
-  getDonation: async (id: number) => {
+  getDonation: async (id: number): Promise<{ success: boolean; donation: AdminDonation }> => {
     const response = await apiClient.get(`/admin/donations/${id}`);
+    return response.data;
+  },
+
+  // Update donation status
+  updateDonation: async (id: number, data: { status: string; notes?: string }) => {
+    const response = await apiClient.put(`/admin/donations/${id}`, data);
     return response.data;
   },
 
@@ -245,6 +415,18 @@ export const adminApi = {
     return response.data;
   },
 
+  // Get donor details
+  getDonor: async (id: number) => {
+    const response = await apiClient.get(`/admin/donors/${id}`);
+    return response.data;
+  },
+
+  // Get all settings
+  getAllSettings: async (): Promise<{ success: boolean; settings: Record<string, string> }> => {
+    const response = await apiClient.get('/admin/settings');
+    return response.data;
+  },
+
   // Get campaign settings
   getCampaignSettings: async () => {
     const response = await apiClient.get('/admin/settings/campaign');
@@ -254,6 +436,12 @@ export const adminApi = {
   // Update campaign settings
   updateCampaignSettings: async (data: any) => {
     const response = await apiClient.put('/admin/settings/campaign', data);
+    return response.data;
+  },
+
+  // Update any settings (superadmin only)
+  updateSettings: async (data: Record<string, string>) => {
+    const response = await apiClient.put('/admin/settings', data);
     return response.data;
   },
 
@@ -269,6 +457,18 @@ export const adminApi = {
   // Get logs
   getLogs: async (params?: { level?: string; category?: string; limit?: number }) => {
     const response = await apiClient.get('/admin/logs', { params });
+    return response.data;
+  },
+
+  // Get admin users
+  getAdminUsers: async () => {
+    const response = await apiClient.get('/admin/users');
+    return response.data;
+  },
+
+  // Get reports/analytics
+  getReports: async (params?: { startDate?: string; endDate?: string }) => {
+    const response = await apiClient.get('/admin/reports', { params });
     return response.data;
   },
 };

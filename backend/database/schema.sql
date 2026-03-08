@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS donors (
   address TEXT,
   city VARCHAR(100),
   country VARCHAR(100),
+  pan_number VARCHAR(10),
+  pan_verified BOOLEAN DEFAULT FALSE,
   is_anonymous BOOLEAN DEFAULT FALSE,
   is_verified BOOLEAN DEFAULT FALSE,
   otp_hash VARCHAR(255),
@@ -20,6 +22,7 @@ CREATE TABLE IF NOT EXISTS donors (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_email (email),
+  INDEX idx_pan_number (pan_number),
   INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -28,12 +31,17 @@ CREATE TABLE IF NOT EXISTS donations (
   id INT AUTO_INCREMENT PRIMARY KEY,
   donor_id INT NOT NULL,
   amount DECIMAL(10, 2) NOT NULL,
+  base_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  fee_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  fee_percentage DECIMAL(5, 2) NOT NULL DEFAULT 0,
+  fee_covered BOOLEAN DEFAULT FALSE,
   hadith_count INT NOT NULL DEFAULT 1,
   status ENUM('pending', 'completed', 'failed', 'refunded') DEFAULT 'pending',
   payment_method VARCHAR(50),
   razorpay_order_id VARCHAR(255),
   razorpay_payment_id VARCHAR(255),
   message TEXT,
+  pan_number VARCHAR(10),
   admin_notes TEXT,
   failure_reason TEXT,
   completed_at DATETIME,
@@ -42,6 +50,8 @@ CREATE TABLE IF NOT EXISTS donations (
   FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE,
   INDEX idx_donor_id (donor_id),
   INDEX idx_status (status),
+  INDEX idx_pan_number (pan_number),
+  INDEX idx_fee_covered (fee_covered),
   INDEX idx_razorpay_order (razorpay_order_id),
   INDEX idx_created_at (created_at),
   INDEX idx_completed_at (completed_at)
@@ -121,5 +131,16 @@ INSERT INTO settings (key_name, value, description) VALUES
 ('campaign_end_date', '', 'Campaign end date'),
 ('enable_anonymous_donations', 'true', 'Enable anonymous donations'),
 ('enable_donor_wall', 'true', 'Enable public donor wall'),
-('enable_receipts', 'true', 'Enable automatic receipt generation')
+('enable_receipts', 'true', 'Enable automatic receipt generation'),
+('enable_fee_coverage', 'true', 'Enable optional payment fee coverage'),
+('fee_percentage', '2.5', 'Payment processing fee percentage'),
+('fee_coverage_label', 'I would like to cover the 2.5% payment processing fee', 'Label for fee coverage checkbox'),
+('enable_pan_field', 'false', 'Enable PAN card number field'),
+('pan_required', 'false', 'Make PAN field required'),
+('show_pan_on_receipt', 'false', 'Show PAN number on receipt'),
+('site_title', 'Ramadan Hadith Fundraiser', 'Website title'),
+('site_description', 'Support the translation of Hadiths this Ramadan', 'Website meta description'),
+('share_message', 'I just donated to support Hadith translation. Join me!', 'Default social share message'),
+('thank_you_message', 'Thank you for your generous donation! May Allah accept it.', 'Thank you message after donation'),
+('footer_text', '© 2026 Aalim Publications. All rights reserved.', 'Footer copyright text')
 ON DUPLICATE KEY UPDATE value = VALUES(value);
