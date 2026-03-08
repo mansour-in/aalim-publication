@@ -85,7 +85,7 @@ export default function AdminLogin() {
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="pl-10 bg-slate-900/50 border-slate-600 text-white placeholder:text-slate-500"
+                  className="pl-10 bg-white border-slate-300 text-slate-900 placeholder:text-slate-400"
                   placeholder="admin@example.com"
                   required
                 />
@@ -101,7 +101,7 @@ export default function AdminLogin() {
                   type={showPassword ? 'text' : 'password'}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="pl-10 pr-10 bg-slate-900/50 border-slate-600 text-white placeholder:text-slate-500"
+                  className="pl-10 pr-10 bg-white border-slate-300 text-slate-900 placeholder:text-slate-400"
                   placeholder="••••••••"
                   required
                 />

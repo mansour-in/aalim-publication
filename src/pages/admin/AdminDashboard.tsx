@@ -44,7 +44,7 @@ export default function AdminDashboard() {
         donationApi.getStats(),
       ]);
       
-      setStats(dashboardRes.data);
+      setStats(dashboardRes.data || dashboardRes.stats);
       setPublicStats(publicRes.data);
     } catch (error: any) {
       setError(error.response?.data?.message || 'Failed to load dashboard');

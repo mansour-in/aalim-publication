@@ -16,6 +16,80 @@ router.use(requireAdmin);
 
 /**
  * Get admin dashboard stats
+ * GET /api/admin/dashboard
+ * GET /api/admin/stats (alias)
+ */
+router.get('/dashboard', asyncHandler(async (req, res) => {
+  const today = new Date().toISOString().split('T')[0];
+  const thisMonth = today.substring(0, 7); // YYYY-MM
+  
+  const stats = await db.queryOne(`
+    SELECT 
+      COUNT(*) as total_donations,
+      COALESCE(SUM(amount), 0) as total_raised,
+      COUNT(DISTINCT donor_id) as total_donors,
+      COALESCE(SUM(hadith_count), 0) as hadiths_sponsored,
+      COALESCE(SUM(CASE WHEN DATE(completed_at) = ? THEN amount ELSE 0 END), 0) as today_raised,
+      COALESCE(SUM(CASE WHEN DATE_FORMAT(completed_at, '%Y-%m') = ? THEN amount ELSE 0 END), 0) as month_raised
+    FROM donations 
+    WHERE status = 'completed'
+  `, [today, thisMonth]);
+  
+  const pending = await db.queryOne(`
+    SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as amount
+    FROM donations WHERE status = 'pending'
+  `);
+  
+  const failed = await db.queryOne(`
+    SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as amount
+    FROM donations WHERE status = 'failed'
+  `);
+  
+  // Get recent donations
+  const recentDonations = await db.query(`
+    SELECT 
+      d.id,
+      d.amount,
+      d.hadith_count,
+      d.status,
+      d.created_at,
+      dn.name as donor_name,
+      dn.email as donor_email,
+      dn.is_anonymous
+    FROM donations d
+    LEFT JOIN donors dn ON d.donor_id = dn.id
+    ORDER BY d.created_at DESC
+    LIMIT 10
+  `);
+  
+  res.json({
+    success: true,
+    data: {
+      totalDonations: stats.total_donations,
+      totalRaised: stats.total_raised,
+      totalDonors: stats.total_donors,
+      hadithsSponsored: stats.hadiths_sponsored,
+      todayRaised: stats.today_raised,
+      monthRaised: stats.month_raised,
+      pendingCount: pending.count,
+      pendingAmount: pending.amount,
+      failedCount: failed.count,
+      failedAmount: failed.amount,
+      recentDonations: recentDonations.map(d => ({
+        id: d.id,
+        amount: d.amount,
+        hadithCount: d.hadith_count,
+        status: d.status,
+        createdAt: d.created_at,
+        donorName: d.is_anonymous ? 'Anonymous' : (d.donor_name || 'Anonymous'),
+        donorEmail: d.donor_email,
+      })),
+    },
+  });
+}));
+
+/**
+ * Get admin stats (alias for dashboard)
  * GET /api/admin/stats
  */
 router.get('/stats', asyncHandler(async (req, res) => {
