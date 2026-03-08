@@ -6,7 +6,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { Parser } = require('json2csv');
+const { Parser } = require('@json2csv/plainjs');
 const db = require('../config/database');
 const { requireAdmin, requireSuperAdmin } = require('../middleware/auth');
 const { asyncHandler, ValidationError, NotFoundError } = require('../middleware/errorHandler');
