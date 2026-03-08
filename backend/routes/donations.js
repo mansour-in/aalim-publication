@@ -68,6 +68,49 @@ router.get('/stats', asyncHandler(async (req, res) => {
 }));
 
 /**
+ * Get public donation statistics
+ * GET /api/donations/stats/public
+ */
+router.get('/public', asyncHandler(async (req, res) => {
+  const stats = await db.queryOne(`
+    SELECT 
+      COUNT(*) as total_donations,
+      COALESCE(SUM(amount), 0) as total_raised,
+      COUNT(DISTINCT donor_id) as total_donors,
+      COALESCE(SUM(hadith_count), 0) as hadiths_sponsored
+    FROM donations 
+    WHERE status = 'completed'
+  `);
+  
+  // Get goal and price from settings
+  const goalSetting = await db.queryOne(
+    "SELECT value FROM settings WHERE key_name = 'fundraising_goal'"
+  );
+  const priceSetting = await db.queryOne(
+    "SELECT value FROM settings WHERE key_name = 'price_per_hadith'"
+  );
+  const goal = goalSetting ? parseFloat(goalSetting.value) : 500000;
+  const pricePerHadith = priceSetting ? parseFloat(priceSetting.value) : 500;
+  
+  const raised = parseFloat(stats.total_raised) || 0;
+  const hadithsSponsored = parseInt(stats.hadiths_sponsored) || 0;
+  
+  res.json({
+    success: true,
+    data: {
+      goal: goal,
+      raised: raised,
+      remaining: Math.max(0, goal - raised),
+      sponsored: hadithsSponsored,
+      donors: parseInt(stats.total_donors) || 0,
+      progress: Math.min(100, (raised / goal) * 100),
+      hadithPrice: pricePerHadith,
+      currency: 'INR',
+    },
+  });
+}));
+
+/**
  * Get donor's donation history
  * GET /api/donations/history
  */
