@@ -9,7 +9,8 @@ const router = express.Router();
 const crypto = require('crypto');
 const db = require('../config/database');
 const { sendEmail } = require('../services/email');
-const { generateTempToken, verifyTempToken, generateDonorToken } = require('../middleware/auth');
+const { generateTempToken, verifyTempToken, generateDonorToken, generateAdminToken } = require('../middleware/auth');
+const bcrypt = require('bcrypt');
 const { asyncHandler, ValidationError, AuthenticationError } = require('../middleware/errorHandler');
 
 /**
@@ -262,6 +263,56 @@ router.put('/profile', asyncHandler(async (req, res) => {
   res.json({
     success: true,
     message: 'Profile updated successfully',
+  });
+}));
+
+/**
+ * Admin login
+ * POST /api/auth/admin/login
+ */
+router.post('/admin/login', asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+  
+  if (!email || !password) {
+    throw new ValidationError('Email and password are required');
+  }
+  
+  // Find admin user
+  const admin = await db.queryOne(
+    'SELECT id, email, name, password_hash, role FROM admin_users WHERE email = ? AND is_active = TRUE',
+    [email]
+  );
+  
+  if (!admin) {
+    throw new AuthenticationError('Invalid credentials');
+  }
+  
+  // Verify password
+  const isValidPassword = await bcrypt.compare(password, admin.password_hash);
+  
+  if (!isValidPassword) {
+    throw new AuthenticationError('Invalid credentials');
+  }
+  
+  // Update last login
+  await db.query(
+    'UPDATE admin_users SET last_login = NOW() WHERE id = ?',
+    [admin.id]
+  );
+  
+  // Generate JWT token
+  const token = generateAdminToken(admin);
+  
+  res.json({
+    success: true,
+    message: 'Login successful',
+    token,
+    admin: {
+      id: admin.id,
+      email: admin.email,
+      name: admin.name,
+      role: admin.role,
+    },
   });
 }));
 
